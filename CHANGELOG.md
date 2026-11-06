@@ -9,4 +9,5 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Add context-first circuit breaker (closed, open, half-open with generations, panic handling, ordered state-change callbacks), generic Do helper, metrics snapshot and a semaphore bulkhead, stdlib only.
 - Initial project structure from the factory utility template.
