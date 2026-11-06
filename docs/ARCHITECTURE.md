@@ -2,28 +2,27 @@
 
 ## Purpose
 
-`github.com/Trysac/u046-circuit-breaker` is a small, dependency-free Go library: Context-first circuit breaker with closed, open and half-open states plus a bulkhead concurrency limiter and metrics snapshot, stdlib only
+`github.com/Trysac/u046-circuit-breaker` is a small, dependency-free Go library: a context-first circuit breaker with closed, open and half-open states, a bulkhead concurrency limiter and a metrics snapshot, using only the standard library.
 
 ## Shape
 
 ```text
 caller code --> package circuitbreaker (repository root)
                     |
-                    +-- pure functions, no I/O, no global mutable state
-                    +-- internal/ (optional private helpers)
+                    +-- Breaker: state machine with generations, guarded by a mutex
+                    +-- Bulkhead: buffered channel semaphore with MaxWait timer
+                    +-- callback queue: transitions delivered after unlock, in order
 ```
 
-- **Public API**: every exported identifier of the root package. Unexported identifiers and
-  `internal/` packages may change without a major version.
-- **Errors**: invalid input returns an error; exported sentinel errors (such as `ErrBlank`) let
-  callers branch with `errors.Is`. The library never panics on input, prints or exits.
-- **Side effects**: none. If a feature needs I/O, accept an interface (`io.Reader` or a small
-  custom one) instead of opening resources, and record the choice in an ADR.
+- **Public API**: every exported identifier of the root package. Unexported identifiers may change without a major version.
+- **Generations**: every state transition starts a new generation. A call admitted in an earlier generation that finishes later is counted only in `Successes` or `Failures`; it cannot change the current state.
+- **Callbacks**: transitions are queued under the state mutex and delivered after unlocking. The queue is capped at 1024 entries; the oldest entry is dropped when full. A callback that panics is recovered and ignored.
+- **Errors**: invalid input returns an error; sentinel errors (`ErrOpen`, `ErrTooManyHalfOpenCalls`, `ErrBulkheadFull`, `ErrInvalidSettings`) let callers branch with `errors.Is`. Nil breaker, nil context or nil function return `ErrInvalidSettings`.
+- **Side effects**: none beyond calling the caller's function and callback. Time comes from `Settings.Now`.
 
 ## Quality contract
 
-`scripts/check` is the single definition of the gates; `fabrica.json` tells the factory and CI
-how to run it. See [TESTING.md](TESTING.md).
+`scripts/check` is the single definition of the gates; `fabrica.json` tells the factory and CI how to run it. See [TESTING.md](TESTING.md).
 
 ## Decisions
 
